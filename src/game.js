@@ -20,6 +20,17 @@ export class Game {
 
         this.windSpeed = 0;
         this.windAngle = 0;
+        this.maxWindSpeed = 5;
+
+        this.shakeX = 0;
+        this.shakeY = 0;
+
+        try {
+            this.theme = localStorage.getItem('theme') || 'dark';
+        } catch (e) {
+            this.theme = 'dark';
+        }
+        document.body.classList.toggle('light-mode', this.theme === 'light');
 
         this.init();
     }
@@ -32,7 +43,9 @@ export class Game {
     }
 
     generateWind() {
-        this.windSpeed = Math.random() * 5;
+        // Difficulty scaling: wind gets stronger as arrows decrease
+        const difficultyMulti = 1 + (10 - this.arrowsLeft) * 0.5;
+        this.windSpeed = Math.random() * this.maxWindSpeed * difficultyMulti;
         this.windAngle = Math.random() * Math.PI * 2;
         this.physics.setWind(this.windSpeed, this.windAngle);
         
@@ -69,6 +82,12 @@ export class Game {
             document.getElementById('game-over').classList.remove('active');
             this.resetGame();
         });
+
+        document.getElementById('theme-toggle').addEventListener('click', () => {
+            this.theme = this.theme === 'dark' ? 'light' : 'dark';
+            document.body.classList.toggle('light-mode', this.theme === 'light');
+            localStorage.setItem('theme', this.theme);
+        });
     }
 
     onStartDrag(x, y) {
@@ -88,6 +107,16 @@ export class Game {
         this.power = Math.min(dist / 200, 1);
         this.aimAngle = Math.atan2(dy, dx);
 
+        // Add "shaking" effect when aiming with high power
+        if (this.power > 0.5) {
+            const jitter = (this.power - 0.5) * 10;
+            this.shakeX = (Math.random() - 0.5) * jitter;
+            this.shakeY = (Math.random() - 0.5) * jitter;
+        } else {
+            this.shakeX = 0;
+            this.shakeY = 0;
+        }
+
         const powerFill = document.getElementById('power-fill');
         if (powerFill) powerFill.style.height = `${this.power * 100}%`;
     }
@@ -101,6 +130,8 @@ export class Game {
         }
         
         this.power = 0;
+        this.shakeX = 0;
+        this.shakeY = 0;
         const powerFill = document.getElementById('power-fill');
         if (powerFill) powerFill.style.height = '0%';
     }
@@ -158,6 +189,17 @@ export class Game {
                 this.score += hitScore;
                 this.updateUI();
                 this.pastArrows.push({...arrow, x: this.renderer.centerX});
+                
+                // Celebration trigger
+                if (hitScore >= 6) {
+                    this.renderer.createCelebration(arrow.x, arrow.y);
+                    if (hitScore === 10) {
+                        const celebText = document.getElementById('celebration-text');
+                        celebText.classList.remove('active');
+                        void celebText.offsetWidth; // Trigger reflow
+                        celebText.classList.add('active');
+                    }
+                }
             } else {
                 // Missed the target
             }
@@ -192,6 +234,7 @@ export class Game {
         this.renderer.drawTarget();
 
         this.pastArrows.forEach(arrow => this.renderer.drawArrow(arrow));
+        this.renderer.drawParticles();
 
         if (this.currentArrow) {
             this.physics.update(this.currentArrow);
@@ -210,9 +253,9 @@ export class Game {
             // Draw a preview line or just the bow being pulled
             const dx = Math.cos(this.aimAngle) * 50;
             const dy = Math.sin(this.aimAngle) * 50;
-            this.renderer.drawBow(dx, dy, this.power);
+            this.renderer.drawBow(dx, dy, this.power, this.shakeX, this.shakeY);
         } else {
-            this.renderer.drawBow(50, 0, 0);
+            this.renderer.drawBow(50, 0, 0, 0, 0);
         }
 
         requestAnimationFrame(() => this.gameLoop());
