@@ -35,17 +35,27 @@
       }
       window.onerror = function(msg, url, line, col, error) {
         addLog(`ERROR: ${msg} (${url}:${line}:${col})`, 'error');
+        showErrorLog();
+        return false;
+      };
+      // Capture-phase listener for resource errors (404s)
+      window.addEventListener('error', function(e) {
+        if (e.target && (e.target.tagName === 'SCRIPT' || e.target.tagName === 'LINK')) {
+          addLog('RESOURCE FAILED: ' + (e.target.src || e.target.href), 'error');
+          showErrorLog();
+        }
+      }, true);
+      function showErrorLog() {
         var errDiv = document.getElementById('error-log');
         if (errDiv) {
           errDiv.style.display = 'block';
           errDiv.innerText = window.logHistory.join('\n');
         }
-        return false;
-      };
+      }
       addLog('HTML initialized. Waiting for module load...');
     </script>
-    <script type="module" crossorigin src="./assets/index-C_DZdzhu.js"></script>
-    <link rel="stylesheet" crossorigin href="./assets/index-BUEf2p9i.css">
+    <script type="module" crossorigin src="/Archery-game/assets/index-C_DZdzhu.js"></script>
+    <link rel="stylesheet" crossorigin href="/Archery-game/assets/index-BUEf2p9i.css">
   </head>
   <body>
     <div id="loading-fallback">
@@ -54,7 +64,7 @@
         <h2 style="margin: 0 0 10px 0; letter-spacing: 2px;">BOWMASTER ELITE</h2>
         <p style="opacity: 0.6; margin: 0;">Building the range...</p>
         <div id="error-log"></div>
-        <p style="opacity: 0.3; font-size: 10px; margin-top: 15px;">Build: 2026-03-02 15:22</p>
+        <p style="opacity: 0.3; font-size: 10px; margin-top: 15px;">Build: 2026-03-02 15:26</p>
       </div>
     </div>
 
