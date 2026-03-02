@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>BowMaster Elite | Archery Experience</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;600;800&display=swap"
+      rel="stylesheet"
+    />
+    <script type="module" crossorigin src="/Archery-game/assets/index-DtYc8hcs.js"></script>
+    <link rel="stylesheet" crossorigin href="/Archery-game/assets/index-B-Shcvmq.css">
+  </head>
+  <body>
+    <div id="app">
+      <canvas id="gameCanvas"></canvas>
+
+      <div id="ui-layer">
+        <header>
+          <div class="stat-box glass">
+            <span class="label">SCORE</span>
+            <span id="score-val" class="value">0</span>
+          </div>
+          <div class="title-container">
+            <h1>BOWMASTER<span>ELITE</span></h1>
+          </div>
+          <div class="stat-box glass">
+            <span class="label">ARROWS</span>
+            <div id="arrows-container"></div>
+          </div>
+        </header>
+
+        <div id="wind-indicator" class="glass">
+          <div class="wind-arrow" id="wind-arrow"></div>
+          <span id="wind-speed">0.0 mph</span>
+        </div>
+
+        <div id="power-gauge-container">
+          <div id="power-gauge">
+            <div id="power-fill"></div>
+          </div>
+          <span class="label">POWER</span>
+        </div>
+
+        <div id="menu" class="overlay active">
+          <div class="menu-content glass">
+            <h2>READY YOUR BOW</h2>
+            <p>Master the wind and become the ultimate marksman.</p>
+            <button id="start-btn" class="primary-btn">START GAME</button>
+            <div class="controls-hint">
+              <span><kbd>CLICK & DRAG</kbd> to Aim</span>
+              <span><kbd>RELEASE</kbd> to Shoot</span>
+            </div>
+          </div>
+        </div>
+
+        <div id="game-over" class="overlay">
+          <div class="menu-content glass">
+            <h2>GAME OVER</h2>
+            <div class="final-score">
+              <span class="label">TOTAL SCORE</span>
+              <span id="final-score-val">0</span>
+            </div>
+            <button id="restart-btn" class="primary-btn">PLAY AGAIN</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </body>
+</html>
