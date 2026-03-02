@@ -1,5 +1,5 @@
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  base: '/Archery-game/', // Explicit base for GitHub Pages subpath
+  base: '/Archery-game/', // Absolute base path for GitHub Pages subpath
 })
