@@ -1,90 +1,132 @@
 export class Renderer {
-    constructor(canvas, ctx) {
+    constructor(canvas) {
         this.canvas = canvas;
-        this.ctx = ctx;
-        this.particles = [];
-        this.resize();
-    }
-
-    resize() {
-        this.canvas.width = window.innerWidth;
-        this.canvas.height = window.innerHeight;
-        this.centerX = this.canvas.width * 0.8; // Target on the right
-        this.centerY = this.canvas.height * 0.5;
-        this.bowX = 150; // Bow on the left
-        this.bowY = this.canvas.height * 0.5;
+        this.ctx = canvas.getContext('2d');
     }
 
     clear() {
-        this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+        // Explicitly fill background with very dark blue to avoid transparency CSS issues
+        this.ctx.fillStyle = '#05070a';
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+        // Draw some basic background vignette
+        let r = Math.max(this.canvas.width, this.canvas.height);
+        if (r <= 0) r = 1;
+        const grad = this.ctx.createRadialGradient(
+            this.canvas.width / 2, this.canvas.height / 2, 0,
+            this.canvas.width / 2, this.canvas.height / 2, r
+        );
+        grad.addColorStop(0, '#101520');
+        grad.addColorStop(1, '#020305');
+        this.ctx.fillStyle = grad;
+        this.ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
     }
 
-    drawTarget() {
-        const isLight = document.body.classList.contains('light-mode');
-        const rings = [
-            { radius: 100, color: isLight ? '#e0e0e0' : '#222', score: 1 },
-            { radius: 80, color: isLight ? '#f0f0f0' : '#333', score: 2 },
-            { radius: 60, color: '#00d2ff', score: 4 },
-            { radius: 40, color: '#ff0055', score: 6 },
-            { radius: 20, color: '#ffcc00', score: 10 }
-        ];
+    drawEnvironment() {
+        // Target Location
+        const targetX = this.canvas.width * 0.85;
+        const targetY = this.canvas.height / 2;
 
         this.ctx.save();
-        this.ctx.translate(this.centerX, this.centerY);
-        
-        // Shadow for target
-        this.ctx.shadowBlur = 20;
-        this.ctx.shadowColor = 'rgba(0,0,0,0.3)';
-
-        // Add perspective (slightly oval)
+        this.ctx.translate(targetX, targetY);
+        // Make it look like a vertical slit/target
         this.ctx.scale(0.3, 1);
+
+        const rings = [
+            { r: 100, c: '#222' },
+            { r: 80, c: '#444' },
+            { r: 60, c: '#00d2ff' },
+            { r: 40, c: '#ff0055' },
+            { r: 20, c: '#ffcc00' }
+        ];
 
         rings.forEach(ring => {
             this.ctx.beginPath();
-            this.ctx.arc(0, 0, ring.radius, 0, Math.PI * 2);
-            this.ctx.fillStyle = ring.color;
+            this.ctx.arc(0, 0, ring.r, 0, Math.PI * 2);
+            this.ctx.fillStyle = ring.c;
             this.ctx.fill();
-            this.ctx.strokeStyle = 'rgba(0,0,0,0.1)';
-            this.ctx.lineWidth = 1;
+            this.ctx.strokeStyle = '#000';
+            this.ctx.lineWidth = 2;
             this.ctx.stroke();
         });
 
         this.ctx.restore();
     }
 
-    drawBow(pullX, pullY, power, shakeX = 0, shakeY = 0) {
-        const bowWidth = 100;
-        const bowHeight = 200;
-
+    drawBow(baseX, baseY, pullDx, pullDy, isDragging) {
         this.ctx.save();
-        // Apply shaking offset to the whole bow
-        this.ctx.translate(this.bowX + shakeX, this.bowY + shakeY);
+        this.ctx.translate(baseX, baseY);
 
-        // Calculate bow rotation based on aim
-        const angle = Math.atan2(pullY, pullX);
+        // Rotate bow based on pull direction
+        let angle = 0;
+        let pullDist = 0;
+        if (isDragging) {
+            angle = Math.atan2(pullDy, pullDx);
+            pullDist = Math.min(Math.sqrt(pullDx * pullDx + pullDy * pullDy), 120);
+        } else {
+            // Angle the bow down naturally when idle
+            angle = Math.PI / 8;
+        }
         this.ctx.rotate(angle);
 
-        // Draw bow limbs
+        // Core Bow Arc (Thick, stylized)
         this.ctx.beginPath();
-        this.ctx.moveTo(0, -bowHeight / 2);
-        this.ctx.quadraticCurveTo(bowWidth / 2, 0, 0, bowHeight / 2);
-        
-        const isLight = document.body.classList.contains('light-mode');
-        this.ctx.strokeStyle = isLight ? '#00d2ff' : '#fff';
-        this.ctx.lineWidth = 4;
+        this.ctx.arc(0, 0, 90, -Math.PI / 2.2, Math.PI / 2.2);
+        this.ctx.strokeStyle = '#2b2d42'; // Dark modern material
+        this.ctx.lineWidth = 14;
         this.ctx.lineCap = 'round';
         this.ctx.stroke();
 
-        // Draw bow string
+        // Bow Inner Highlight (Premium look)
         this.ctx.beginPath();
-        this.ctx.moveTo(0, -bowHeight / 2);
-        // The pull affects the middle point of the string
-        const pullDist = Math.min(power * 60, 80);
-        this.ctx.lineTo(-pullDist, 0);
-        this.ctx.lineTo(0, bowHeight / 2);
-        this.ctx.strokeStyle = isLight ? 'rgba(0,0,0,0.2)' : 'rgba(255,255,255,0.5)';
-        this.ctx.lineWidth = 1;
+        this.ctx.arc(0, 0, 85, -Math.PI / 2.3, Math.PI / 2.3);
+        this.ctx.strokeStyle = '#00d2ff'; // Glowing edge
+        this.ctx.lineWidth = 2;
+        this.ctx.lineCap = 'round';
         this.ctx.stroke();
+
+        // Glowing String
+        const stringDist = isDragging ? -pullDist : 0;
+        this.ctx.beginPath();
+        this.ctx.moveTo(Math.cos(-Math.PI / 2.2) * 90, Math.sin(-Math.PI / 2.2) * 90);
+        this.ctx.lineTo(stringDist, 0);
+        this.ctx.lineTo(Math.cos(Math.PI / 2.2) * 90, Math.sin(Math.PI / 2.2) * 90);
+        this.ctx.strokeStyle = '#00e5ff';
+        this.ctx.lineWidth = 2;
+        this.ctx.shadowBlur = 10;
+        this.ctx.shadowColor = '#00e5ff';
+        this.ctx.stroke();
+        this.ctx.shadowBlur = 0; // reset shadow
+
+        // Draw Loaded Arrow being pulled back
+        if (isDragging || !this.activeArrow) {
+            // If dragging, draw arrow on the string. If not dragging and no arrow flying, draw arrow idle on bow.
+            const arrowX = isDragging ? stringDist : 0;
+            this.ctx.beginPath();
+            this.ctx.moveTo(arrowX, 0);
+            this.ctx.lineTo(arrowX + 80, 0); // longer arrow
+            this.ctx.strokeStyle = '#fff';
+            this.ctx.lineWidth = 3;
+            this.ctx.stroke();
+
+            // Arrowhead
+            this.ctx.beginPath();
+            this.ctx.moveTo(arrowX + 80, 0);
+            this.ctx.lineTo(arrowX + 65, -6);
+            this.ctx.lineTo(arrowX + 65, 6);
+            this.ctx.fillStyle = '#00e5ff';
+            this.ctx.fill();
+
+            // Fletching
+            this.ctx.beginPath();
+            this.ctx.moveTo(arrowX, 0);
+            this.ctx.lineTo(arrowX - 8, -6);
+            this.ctx.moveTo(arrowX, 0);
+            this.ctx.lineTo(arrowX - 8, 6);
+            this.ctx.strokeStyle = '#ff0055';
+            this.ctx.lineWidth = 2;
+            this.ctx.stroke();
+        }
 
         this.ctx.restore();
     }
@@ -92,80 +134,82 @@ export class Renderer {
     drawArrow(arrow) {
         this.ctx.save();
         this.ctx.translate(arrow.x, arrow.y);
-        this.ctx.rotate(arrow.rotation);
-
-        // Shadow/Glow
-        this.ctx.shadowBlur = 10;
-        this.ctx.shadowColor = 'rgba(0, 132, 255, 0.5)';
+        this.ctx.rotate(arrow.angle);
 
         // Shaft
         this.ctx.beginPath();
         this.ctx.moveTo(-40, 0);
         this.ctx.lineTo(0, 0);
         this.ctx.strokeStyle = '#fff';
-        this.ctx.lineWidth = 2;
+        this.ctx.lineWidth = 3;
         this.ctx.stroke();
+
+        // Arrowhead
+        this.ctx.beginPath();
+        this.ctx.moveTo(0, 0);
+        this.ctx.lineTo(-10, -5);
+        this.ctx.lineTo(-10, 5);
+        this.ctx.fillStyle = '#ccc';
+        this.ctx.fill();
 
         // Fletching (feathers)
         this.ctx.beginPath();
         this.ctx.moveTo(-40, 0);
-        this.ctx.lineTo(-45, -5);
-        this.ctx.lineTo(-35, 0);
-        this.ctx.lineTo(-45, 5);
-        this.ctx.closePath();
-        this.ctx.fillStyle = '#0084ff';
-        this.ctx.fill();
-
-        // Arrow head
-        this.ctx.beginPath();
-        this.ctx.moveTo(0, 0);
-        this.ctx.lineTo(-5, -3);
-        this.ctx.lineTo(-5, 3);
-        this.ctx.closePath();
-        this.ctx.fillStyle = '#fff';
-        this.ctx.fill();
+        this.ctx.lineTo(-45, -4);
+        this.ctx.moveTo(-40, 0);
+        this.ctx.lineTo(-45, 4);
+        this.ctx.strokeStyle = '#ff0055'; // changed to accent
+        this.ctx.lineWidth = 2;
+        this.ctx.stroke();
 
         this.ctx.restore();
     }
 
-    createCelebration(x, y) {
-        const colors = ['#00d2ff', '#9d00ff', '#ff0055', '#ffcc00', '#00ff88'];
-        for (let i = 0; i < 30; i++) {
-            this.particles.push({
-                x, y,
-                vx: (Math.random() - 0.5) * 10,
-                vy: (Math.random() - 0.5) * 10,
-                life: 1.0,
-                color: colors[Math.floor(Math.random() * colors.length)],
-                size: Math.random() * 4 + 2
-            });
-        }
-    }
+    drawTraps(traps) {
+        traps.forEach(t => {
+            this.ctx.save();
+            this.ctx.translate(t.x, t.y);
 
-    drawParticles() {
-        for (let i = this.particles.length - 1; i >= 0; i--) {
-            const p = this.particles[i];
-            p.x += p.vx;
-            p.y += p.vy;
-            p.vy += 0.1; // gravity
-            p.life -= 0.02;
+            // Trap Body
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, t.size, 0, Math.PI * 2);
+            this.ctx.fillStyle = '#ff0055'; // accent color
+            this.ctx.shadowBlur = 15;
+            this.ctx.shadowColor = '#ff0055';
+            this.ctx.fill();
 
-            if (p.life <= 0) {
-                this.particles.splice(i, 1);
-                continue;
+            // Inner eye/core
+            this.ctx.beginPath();
+            this.ctx.arc(0, 0, t.size * 0.4, 0, Math.PI * 2);
+            this.ctx.fillStyle = '#1a1e30';
+            this.ctx.shadowBlur = 0;
+            this.ctx.fill();
+
+            // Spikes (rotation based on id/time)
+            const time = Date.now() / 200;
+            this.ctx.rotate(time * t.rotSpeed);
+            for (let i = 0; i < 4; i++) {
+                this.ctx.beginPath();
+                this.ctx.moveTo(0, -t.size);
+                this.ctx.lineTo(5, -t.size - 10);
+                this.ctx.lineTo(-5, -t.size - 10);
+                this.ctx.fillStyle = '#ff0055';
+                this.ctx.fill();
+                this.ctx.rotate(Math.PI / 2);
             }
 
-            this.ctx.save();
-            this.ctx.beginPath();
-            this.ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-            this.ctx.fillStyle = p.color;
-            this.ctx.globalAlpha = p.life;
-            this.ctx.fill();
             this.ctx.restore();
-        }
+        });
     }
 
-    drawWindLabel(wind) {
-        // Handled by UI layer
+    drawParticles(particles) {
+        particles.forEach(p => {
+            this.ctx.globalAlpha = Math.max(0, p.life);
+            this.ctx.fillStyle = p.color;
+            this.ctx.beginPath();
+            this.ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+            this.ctx.fill();
+        });
+        this.ctx.globalAlpha = 1.0;
     }
 }

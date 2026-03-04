@@ -1,35 +1,41 @@
 export class Physics {
-  static GRAVITY = 0.15;
-  static AIR_RESISTANCE = 0.995;
+    constructor() {
+        this.gravity = 0.5;
+        this.windX = 0;
+        this.windY = 0;
+        this.airResistance = 0.99;
+    }
 
-  constructor() {
-    this.wind = { x: 0, y: 0 };
-  }
+    setWind(x, y) {
+        // Wind is given in mph, convert to pixel force 
+        this.windX = x * 0.05;
+        this.windY = y * 0.05;
+    }
 
-  setWind(speed, angle) {
-    this.wind.x = Math.cos(angle) * speed;
-    this.wind.y = Math.sin(angle) * speed;
-  }
+    createArrow(x, y, velocity, angle) {
+        return {
+            x: x,
+            y: y,
+            lastX: x,
+            lastY: y,
+            vx: Math.cos(angle) * velocity,
+            vy: Math.sin(angle) * velocity,
+            angle: angle,
+            isStuck: false
+        };
+    }
 
-  update(arrow) {
-    if (!arrow.isFlying) return;
+    updateArrow(arrow) {
+        arrow.vy += this.gravity;
+        arrow.vx += this.windX;
+        arrow.vy += this.windY;
 
-    // Apply wind influence
-    arrow.vx += this.wind.x * 0.01;
-    arrow.vy += this.wind.y * 0.01;
+        arrow.vx *= this.airResistance;
+        arrow.vy *= this.airResistance;
 
-    // Apply gravity
-    arrow.vy += Physics.GRAVITY;
+        arrow.x += arrow.vx;
+        arrow.y += arrow.vy;
 
-    // Apply air resistance
-    arrow.vx *= Physics.AIR_RESISTANCE;
-    arrow.vy *= Physics.AIR_RESISTANCE;
-
-    // Update position
-    arrow.x += arrow.vx;
-    arrow.y += arrow.vy;
-
-    // Update rotation to follow trajectory
-    arrow.rotation = Math.atan2(arrow.vy, arrow.vx);
-  }
+        arrow.angle = Math.atan2(arrow.vy, arrow.vx);
+    }
 }

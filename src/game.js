@@ -1,263 +1,271 @@
-import { Physics } from './physics.js';
 import { Renderer } from './renderer.js';
+import { Physics } from './physics.js';
 
 export class Game {
-    constructor() {
-        this.canvas = document.getElementById('gameCanvas');
-        this.ctx = this.canvas.getContext('2d');
-        
-        this.renderer = new Renderer(this.canvas, this.ctx);
+    constructor(canvas) {
+        this.canvas = canvas;
+        this.renderer = new Renderer(canvas);
         this.physics = new Physics();
-        
+
+        this.isRunning = false;
         this.score = 0;
-        this.arrowsLeft = 10;
-        this.isGameOver = false;
+        this.arrows = 10;
+        this.windX = 0;
+
         this.isDragging = false;
-        this.currentArrow = null;
-        this.pastArrows = [];
-        this.power = 0;
-        this.aimAngle = 0;
+        this.dragStartX = 0;
+        this.dragStartY = 0;
+        this.currentDragX = 0;
+        this.currentDragY = 0;
 
-        this.windSpeed = 0;
-        this.windAngle = 0;
-        this.maxWindSpeed = 5;
+        this.activeArrow = null;
+        this.hitParticles = [];
+        this.traps = [];
+        this.lastTrapSpawnTime = 0;
 
-        this.shakeX = 0;
-        this.shakeY = 0;
-
-        try {
-            this.theme = localStorage.getItem('theme') || 'dark';
-        } catch (e) {
-            this.theme = 'dark';
-        }
-        document.body.classList.toggle('light-mode', this.theme === 'light');
-
-        this.init();
+        this.bindEvents();
     }
 
-    init() {
-        this.setupEventListeners();
-        this.generateWind();
-        this.updateUI();
-        this.gameLoop();
+    start() {
+        this.score = 0;
+        this.arrows = 20; // gave user more arrows
+        this.updateWind();
+        this.activeArrow = null;
+        this.hitParticles = [];
+        this.traps = [];
+        this.lastTrapSpawnTime = Date.now();
+        this.isRunning = true;
+        this.updateHUD();
+        document.getElementById('power-gauge-container').classList.remove('hidden');
+        this.loop();
     }
 
-    generateWind() {
-        // Difficulty scaling: wind gets stronger as arrows decrease
-        const difficultyMulti = 1 + (10 - this.arrowsLeft) * 0.5;
-        this.windSpeed = Math.random() * this.maxWindSpeed * difficultyMulti;
-        this.windAngle = Math.random() * Math.PI * 2;
-        this.physics.setWind(this.windSpeed, this.windAngle);
-        
-        // Update UI
-        const windArrow = document.getElementById('wind-arrow');
-        const windLabel = document.getElementById('wind-speed');
-        if (windArrow) windArrow.style.transform = `rotate(${this.windAngle}rad)`;
-        if (windLabel) windLabel.textContent = `${this.windSpeed.toFixed(1)} mph`;
+    updateWind() {
+        // Wind always flows in the direction of the arrow (left to right, positive X)
+        this.windX = (Math.random() * 8 + 2); // Wind between 2 and 10 mph
+        this.physics.setWind(this.windX, 0);
+        document.getElementById('wind-val').textContent = this.windX.toFixed(1) + ' →';
     }
 
-    setupEventListeners() {
-        window.addEventListener('resize', () => this.renderer.resize());
-
-        this.canvas.addEventListener('mousedown', (e) => this.onStartDrag(e.clientX, e.clientY));
-        this.canvas.addEventListener('mousemove', (e) => this.onDrag(e.clientX, e.clientY));
-        window.addEventListener('mouseup', () => this.onEndDrag());
-
-        this.canvas.addEventListener('touchstart', (e) => {
-            const touch = e.touches[0];
-            this.onStartDrag(touch.clientX, touch.clientY);
-        });
-        this.canvas.addEventListener('touchmove', (e) => {
-            const touch = e.touches[0];
-            this.onDrag(touch.clientX, touch.clientY);
-        });
-        window.addEventListener('touchend', () => this.onEndDrag());
-
-        document.getElementById('start-btn').addEventListener('click', () => {
-            document.getElementById('menu').classList.remove('active');
-            this.resetGame();
-        });
-
-        document.getElementById('restart-btn').addEventListener('click', () => {
-            document.getElementById('game-over').classList.remove('active');
-            this.resetGame();
-        });
-
-        document.getElementById('theme-toggle').addEventListener('click', () => {
-            this.theme = this.theme === 'dark' ? 'light' : 'dark';
-            document.body.classList.toggle('light-mode', this.theme === 'light');
-            localStorage.setItem('theme', this.theme);
-        });
+    updateHUD() {
+        document.getElementById('score-val').textContent = this.score;
+        document.getElementById('arrows-val').textContent = this.arrows;
     }
 
-    onStartDrag(x, y) {
-        if (this.isGameOver || this.currentArrow) return;
-        this.isDragging = true;
-        this.startX = x;
-        this.startY = y;
-    }
-
-    onDrag(x, y) {
-        if (!this.isDragging) return;
-        
-        const dx = this.startX - x;
-        const dy = this.startY - y;
-        const dist = Math.sqrt(dx * dx + dy * dy);
-        
-        this.power = Math.min(dist / 200, 1);
-        this.aimAngle = Math.atan2(dy, dx);
-
-        // Add "shaking" effect when aiming with high power
-        if (this.power > 0.5) {
-            const jitter = (this.power - 0.5) * 10;
-            this.shakeX = (Math.random() - 0.5) * jitter;
-            this.shakeY = (Math.random() - 0.5) * jitter;
-        } else {
-            this.shakeX = 0;
-            this.shakeY = 0;
-        }
-
-        const powerFill = document.getElementById('power-fill');
-        if (powerFill) powerFill.style.height = `${this.power * 100}%`;
-    }
-
-    onEndDrag() {
-        if (!this.isDragging) return;
-        this.isDragging = false;
-        
-        if (this.power > 0.1) {
-            this.shoot();
-        }
-        
-        this.power = 0;
-        this.shakeX = 0;
-        this.shakeY = 0;
-        const powerFill = document.getElementById('power-fill');
-        if (powerFill) powerFill.style.height = '0%';
-    }
-
-    shoot() {
-        if (this.arrowsLeft <= 0) return;
-
-        this.arrowsLeft--;
-        this.updateUI();
-
-        const shootPower = this.power * 15;
-        this.currentArrow = {
-            x: this.renderer.bowX,
-            y: this.renderer.bowY,
-            vx: Math.cos(this.aimAngle) * shootPower,
-            vy: Math.sin(this.aimAngle) * shootPower,
-            rotation: this.aimAngle,
-            isFlying: true
+    bindEvents() {
+        const handleDown = (e) => {
+            if (!this.isRunning || this.activeArrow || this.arrows <= 0) return;
+            this.isDragging = true;
+            this.dragStartX = e.clientX || (e.touches && e.touches[0].clientX);
+            this.dragStartY = e.clientY || (e.touches && e.touches[0].clientY);
+            this.currentDragX = this.dragStartX;
+            this.currentDragY = this.dragStartY;
         };
+
+        const handleMove = (e) => {
+            if (!this.isDragging) return;
+            this.currentDragX = e.clientX || (e.touches && e.touches[0].clientX);
+            this.currentDragY = e.clientY || (e.touches && e.touches[0].clientY);
+            if (e.cancelable) e.preventDefault();
+        };
+
+        const handleUp = (e) => {
+            if (!this.isDragging) return;
+            this.isDragging = false;
+            document.getElementById('power-fill').style.width = '0%';
+
+            const pullDx = this.dragStartX - this.currentDragX;
+            const pullDy = this.dragStartY - this.currentDragY;
+
+            let power = Math.sqrt(pullDx * pullDx + pullDy * pullDy);
+            if (power < 10) return;
+            if (power > 300) power = 300;
+
+            const maxVelocity = 40;
+            const velocity = (power / 300) * maxVelocity;
+
+            const angle = Math.atan2(pullDy, pullDx);
+
+            this.fireArrow(velocity, angle);
+        };
+
+        this.canvas.addEventListener('mousedown', handleDown);
+        this.canvas.addEventListener('mousemove', handleMove);
+        window.addEventListener('mouseup', handleUp);
+
+        this.canvas.addEventListener('touchstart', handleDown, { passive: false });
+        this.canvas.addEventListener('touchmove', handleMove, { passive: false });
+        window.addEventListener('touchend', handleUp);
     }
 
-    updateUI() {
-        const scoreEl = document.getElementById('score-val');
-        const arrowsContainer = document.getElementById('arrows-container');
-        
-        if (scoreEl) scoreEl.textContent = this.score;
-        if (arrowsContainer) {
-            arrowsContainer.innerHTML = '';
-            for (let i = 0; i < this.arrowsLeft; i++) {
-                const icon = document.createElement('div');
-                icon.className = 'arrow-icon';
-                arrowsContainer.appendChild(icon);
+    fireArrow(velocity, angle) {
+        this.arrows--;
+        this.updateHUD();
+
+        const bowX = 150;
+        const bowY = this.canvas.height / 2;
+
+        this.activeArrow = this.physics.createArrow(bowX, bowY, velocity, angle);
+    }
+
+    checkHit() {
+        if (!this.activeArrow) return;
+
+        const targetX = this.canvas.width * 0.85;
+        const targetY = this.canvas.height / 2;
+
+        if (this.activeArrow.x >= targetX && this.activeArrow.lastX < targetX) {
+            const ratio = (targetX - this.activeArrow.lastX) / (this.activeArrow.x - this.activeArrow.lastX);
+            const interceptY = this.activeArrow.lastY + (this.activeArrow.y - this.activeArrow.lastY) * ratio;
+
+            const distFromCenter = Math.abs(interceptY - targetY);
+            // Account for target visual scale which is 0.3 on X axis but full on Y.
+            // On Y axis, rings are 100, 80, 60, 40, 20
+            let points = 0;
+
+            if (distFromCenter < 20) points = 10;
+            else if (distFromCenter < 40) points = 6;
+            else if (distFromCenter < 60) points = 4;
+            else if (distFromCenter < 80) points = 2;
+            else if (distFromCenter < 100) points = 1;
+
+            if (points > 0) {
+                this.score += points;
+                this.updateWind();
+                this.updateHUD();
+                this.createParticles(targetX, interceptY, '#00d2ff');
             }
+
+            this.activeArrow.vx = 0;
+            this.activeArrow.vy = 0;
+            this.activeArrow.isStuck = true;
+            this.activeArrow.x = targetX;
+            this.activeArrow.y = interceptY;
+
+            setTimeout(() => {
+                this.activeArrow = null;
+                if (this.arrows <= 0) this.endGame();
+            }, 1000);
+        } else if (this.activeArrow.y > this.canvas.height || this.activeArrow.x > this.canvas.width) {
+            this.activeArrow = null;
+            if (this.arrows <= 0) this.endGame();
         }
     }
 
-    checkCollision(arrow) {
-        // Simple collision with the plane of the target
-        if (arrow.x >= this.renderer.centerX) {
-            arrow.isFlying = false;
-            
-            // Calculate distance from center on the target face
-            const dy = arrow.y - this.renderer.centerY;
-            // The target is represented as a circle in 2D, but we should consider the Y offset
-            const dist = Math.abs(dy);
-            
-            let hitScore = 0;
-            if (dist < 20) hitScore = 10;
-            else if (dist < 40) hitScore = 6;
-            else if (dist < 60) hitScore = 4;
-            else if (dist < 80) hitScore = 2;
-            else if (dist < 100) hitScore = 1;
-
-            if (hitScore > 0) {
-                this.score += hitScore;
-                this.updateUI();
-                this.pastArrows.push({...arrow, x: this.renderer.centerX});
-                
-                // Celebration trigger
-                if (hitScore >= 6) {
-                    this.renderer.createCelebration(arrow.x, arrow.y);
-                    if (hitScore === 10) {
-                        const celebText = document.getElementById('celebration-text');
-                        celebText.classList.remove('active');
-                        void celebText.offsetWidth; // Trigger reflow
-                        celebText.classList.add('active');
-                    }
-                }
-            } else {
-                // Missed the target
-            }
-
-            this.currentArrow = null;
-            this.generateWind();
-
-            if (this.arrowsLeft === 0) {
-                setTimeout(() => this.endGame(), 1000);
-            }
+    createParticles(x, y, color) {
+        for (let i = 0; i < 15; i++) {
+            this.hitParticles.push({
+                x, y,
+                vx: (Math.random() - 0.5) * 10,
+                vy: (Math.random() - 0.5) * 10,
+                life: 1.0,
+                color
+            });
         }
-    }
-
-    resetGame() {
-        this.score = 0;
-        this.arrowsLeft = 10;
-        this.isGameOver = false;
-        this.currentArrow = null;
-        this.pastArrows = [];
-        this.updateUI();
-        this.generateWind();
     }
 
     endGame() {
-        this.isGameOver = true;
-        document.getElementById('game-over').classList.add('active');
-        document.getElementById('final-score-val').textContent = this.score;
+        this.isRunning = false;
+        document.getElementById('power-gauge-container').classList.add('hidden');
+        if (this.onGameOver) this.onGameOver(this.score);
     }
 
-    gameLoop() {
-        this.renderer.clear();
-        this.renderer.drawTarget();
+    spawnTrap() {
+        const now = Date.now();
+        // Spawns faster as score goes up
+        const difficultyMulti = 1 + (this.score / 50);
+        const spawnInterval = 3000 / difficultyMulti;
 
-        this.pastArrows.forEach(arrow => this.renderer.drawArrow(arrow));
-        this.renderer.drawParticles();
+        if (now - this.lastTrapSpawnTime > spawnInterval) {
+            this.traps.push({
+                x: this.canvas.width + 50,
+                y: 100 + Math.random() * (this.canvas.height - 200),
+                vx: - (3 + Math.random() * 4) * difficultyMulti, // move left
+                size: 20 + Math.random() * 20,
+                rotSpeed: (Math.random() > 0.5 ? 1 : -1) * (0.5 + Math.random()),
+                id: now
+            });
+            this.lastTrapSpawnTime = now;
+        }
+    }
 
-        if (this.currentArrow) {
-            this.physics.update(this.currentArrow);
-            this.renderer.drawArrow(this.currentArrow);
-            this.checkCollision(this.currentArrow);
+    loop() {
+        if (!this.isRunning) return;
 
-            // Out of bounds
-            if (this.currentArrow && (this.currentArrow.y > this.canvas.height || this.currentArrow.x < 0)) {
-                this.currentArrow = null;
-                this.generateWind();
-                if (this.arrowsLeft === 0) this.endGame();
+        let dx = 0;
+        let dy = 0;
+        if (this.isDragging) {
+            dx = this.dragStartX - this.currentDragX;
+            dy = this.dragStartY - this.currentDragY;
+
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            let powerRatio = Math.min(dist / 300, 1.0);
+            document.getElementById('power-fill').style.width = `${powerRatio * 100}%`;
+
+            if (dist > 120) {
+                const ratio = 120 / dist;
+                dx *= ratio;
+                dy *= ratio;
             }
         }
 
-        if (this.isDragging) {
-            // Draw a preview line or just the bow being pulled
-            const dx = Math.cos(this.aimAngle) * 50;
-            const dy = Math.sin(this.aimAngle) * 50;
-            this.renderer.drawBow(dx, dy, this.power, this.shakeX, this.shakeY);
-        } else {
-            this.renderer.drawBow(50, 0, 0, 0, 0);
+        this.spawnTrap();
+
+        // Update Traps and check collision with active arrow
+        let arrowDestroyedByTrap = false;
+        for (let i = this.traps.length - 1; i >= 0; i--) {
+            let t = this.traps[i];
+            t.x += t.vx;
+
+            // Check collision with arrow
+            if (this.activeArrow && !this.activeArrow.isStuck) {
+                const dist = Math.hypot(t.x - this.activeArrow.x, t.y - this.activeArrow.y);
+                if (dist < t.size + 10) {
+                    // Trap Hit!
+                    this.createParticles(this.activeArrow.x, this.activeArrow.y, '#ff0055');
+                    this.traps.splice(i, 1);
+                    arrowDestroyedByTrap = true;
+                    this.score = Math.max(0, this.score - 5);
+                    this.updateHUD();
+                    continue;
+                }
+            }
+
+            if (t.x < -100) {
+                this.traps.splice(i, 1);
+            }
         }
 
-        requestAnimationFrame(() => this.gameLoop());
+        if (arrowDestroyedByTrap) {
+            this.activeArrow = null;
+            if (this.arrows <= 0) this.endGame();
+        }
+
+        if (this.activeArrow && !this.activeArrow.isStuck) {
+            this.activeArrow.lastX = this.activeArrow.x;
+            this.activeArrow.lastY = this.activeArrow.y;
+            this.physics.updateArrow(this.activeArrow);
+            this.checkHit();
+        }
+
+        for (let i = this.hitParticles.length - 1; i >= 0; i--) {
+            let p = this.hitParticles[i];
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life -= 0.05;
+            if (p.life <= 0) this.hitParticles.splice(i, 1);
+        }
+
+        this.renderer.clear();
+        this.renderer.drawEnvironment();
+        this.renderer.drawTraps(this.traps);
+        this.renderer.drawBow(150, this.canvas.height / 2, dx, dy, this.isDragging);
+        if (this.activeArrow) {
+            this.renderer.drawArrow(this.activeArrow);
+        }
+        this.renderer.drawParticles(this.hitParticles);
+
+        requestAnimationFrame(() => this.loop());
     }
 }
